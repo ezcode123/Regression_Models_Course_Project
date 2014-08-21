@@ -1,15 +1,246 @@
+---
+output: pdf_document
+fontsize: 9pt
+---
 Regression Models Course Project Submission
 ========================================================
-     
-## Introduction
+ 
+## Executive Summary
 
-```{r}
-summary(cars)
+This analysis uses the mtcars dataset to investigate whether or not automatic or manual transmission is better for mileage.  This dataset was extracted from the 1974 Motor Trend magazine and includes 10 aspects of automobile design and performance for 32 automobiles.  It is found that the transmission type does have an influence on mpg in a simple marginal model, however the difference in average mpg is found to be not statistically significant when the data is fit with a multivariate model.
+
+## Variables
+
+The mtcars dataset includes the following variables.  For this analysis, am is renamed as transmission.  The following variables are treated as categorical:  cyl, vs, transmission, gear, and carb.
+
+*     mpg       -- Miles/(US) gallon
+*	 cyl       -- Number of cylinders
+*	 disp      -- Displacement (cu.in.)
+*	 hp        -- Gross horsepower
+*	 drat      -- Rear axle ratio
+*	 wt        -- Weight (lb/1000)
+*	 qsec      -- 1/4 mile time
+*	 vs        -- V/S
+*	 am        -- Transmission (0 = automatic, 1 = manual)
+*	 gear      -- Number of forward gears
+*	 carb      -- Number of carburetors
+
+## The Marginal Model
+```{r modelsimple, message=FALSE, echo=FALSE}
+data(mtcars)
+mtcars1 <- mtcars
+mtcars1$transmission <- factor(ifelse(mtcars$am==1,"Manual","Automatic"))
+mtcars1$cyl <- factor(mtcars$cyl)
+mtcars1$vs <- factor(mtcars$vs)
+mtcars1$gear <- factor(mtcars$gear)
+mtcars1$carb <- factor(mtcars$carb)
+mtcars1 <- mtcars1[,!names(mtcars1)=="am"]
+fit1 <- lm(mpg ~ transmission, mtcars1)
+sumCoef <- summary(fit1)$coefficients
+high1 <- sumCoef[2,1] + qt(.975, df = fit1$df) * sumCoef[2, 2]
+low1  <- sumCoef[2,1] - qt(.975, df = fit1$df) * sumCoef[2, 2]
+R2_1 <- summary(fit1)$r.squared 
 ```
 
-You can also embed plots, for example:
-
-```{r fig.width=7, fig.height=6}
-plot(cars)
+As seen in Figure 1 in the appendix, mpg does appear to increase with a manual transmission versus an automatic one.  The marginal linear model including only the transmission type as a factor reveals that the null hypothesis $H_0: \beta_{transmissionManual} = 0$ (the difference in mean mpg between manual versus automatic transmissions is zero) is rejected using a p-value of 0.05 as a benchmark.  The expected difference in mean mpg between manual and automatic transmissions is 7.24 gallons.  We can say with a 95% confidence that the difference in mean mpg between manual and automatic transmissions is between `r round(low1, 2)` and `r round(high1,2)`.  The $R^2$ for this model is `r R2_1`, suggesting that inclusion of other variables is likely required.
+```{r modelsimple2, message=FALSE, echo=FALSE}
+summary(fit1)$coefficients
 ```
 
+Examining either the pairwise scatterplot (Figure 2 in the appendix) or the correlation coefficients below shows that the transmission is not independent of other variables in the dataset and mpg has other dependencies.  Specifically, transmission shows correlation with the variables drat, wt, and gear and mpg shows correlation with cyl, disp, hp, and wt. It is clear that the marginal linear model is likely not adequate and that more complex models need to be explored.
+
+Select Correlation Coefficients:   
+```{r cor, echo=FALSE, message=FALSE}
+names(mtcars)[names(mtcars)=="am"] <- "transmission"
+#print("Correlation Coefficients for mtcars transmission")
+round(cor(mtcars)[c(1,9),c(2:8,10:11)],2)
+```
+## Exploring Multivariate Models
+
+The approach taken to finding a statistical model that includes more variables is to start with a model that includes all the variables, choose the variable with the highest p value, and then do an anova comparison to determine whether or not there is any difference in the model by removing that variable.  If there is a significant difference in models, the variable is retained, otherwise it is removed from the model.  This is iteratively done through all the variables (except transmission) with order determined by p-values in the model that was inclusive of all the variables.  
+
+```{r modelallsub, message=FALSE, echo=FALSE, results='hide'}
+fit2 <- lm(mpg ~ ., mtcars1)
+summary(fit2)$coefficients
+
+fit3 <- update(fit2, mpg ~ .-qsec)
+anova(fit2, fit3)
+#summary(fit3)$coefficients
+
+fit4 <- update(fit3, mpg ~ .-drat)
+anova(fit3, fit4)
+#summary(fit4)$coefficients
+
+fit5 <- update(fit4, mpg ~ .-vs)
+anova(fit4, fit5)
+#summary(fit5)$coefficients
+
+fit6 <- update(fit5, mpg ~ .-gear)
+anova(fit5, fit6)
+#summary(fit6)$coefficients
+
+fit7 <- update(fit6, mpg ~ .-carb)
+anova(fit6, fit7)
+#summary(fit7)$coefficients
+
+fit8 <- update(fit7, mpg ~ .-cyl)
+anova(fit7, fit8)
+#summary(fit8)$coefficients
+
+fit9 <- update(fit8, mpg ~ .-disp)
+anova(fit8, fit9)
+#summary(fit9)$coefficients
+
+fit10 <- update(fit9, mpg ~ .-wt)
+anova(fit9, fit10)
+#summary(fit10)$coefficients
+
+fit11 <- update(fit9, mpg ~ .-hp)
+anova(fit9, fit11)
+#summary(fit11)$coefficients
+
+summary(fit9)
+R2_2 <- round(summary(fit9)$r.squared,3)
+sumCoef2 <- summary(fit9)$coefficients
+
+fit9a <- update(fit9, mpg ~ .-transmission)
+anova(fit9, fit9a)
+R2_3 <- round(summary(fit9a)$r.squared,3)
+```
+The final model obtained using this method (fit9) includes the covariates wt, hp, and the transmission type.  The coefficients are summarized below and the $R^2$ is now `r R2_2`, an improvement over the marginal linear model.  Note that the p-value for $\beta_{transmissionManual}$ is no longer less than 0.05.  By adding the covariates to the model, the null hypothesis that $\beta_{transmissionManual} = 0$ can no longer be rejected.  Running an anova comparison between the model of mpg ~ hp + wt + transmission (fit9) and mpg ~ hp + wt (fit9a) shows that transmission does not significantly change the model results and can be removed.  For the fit9a, the $R^2$ is now `r R2_3`, likely lower than that of fit9 due to fewer covariates.
+
+Model9 with mpg ~ hp + wt + transmission:    
+```{r fit9sum, echo=FALSE, message=FALSE}
+summary(fit9)$coefficients
+```
+Model9a with mpg ~ hp + wt:    
+```{r fit9asum, echo=FALSE, message=FALSE}
+summary(fit9a)$coefficients
+```
+```{r modelallsub2, message=FALSE, echo=FALSE, results='hide'}
+fit2 <- lm(mpg ~ ., mtcars1)
+summary(fit2)$coefficients
+# choose cyl based on cyl8 p-value = 0.96317000
+
+fit13 <- update(fit2, mpg ~ .-cyl)
+anova(fit2, fit13) 
+#anova tells us we can get rid of cyl
+summary(fit13)$coefficients
+# choose carb based on carb6 p-vaule = 0.8632349
+
+fit14 <- update(fit13, mpg ~ .-carb)
+anova(fit13, fit14)
+# anova tells us we can get rid of carb
+summary(fit14)$coefficients
+# choose gear based on gear4 p-value = 0.86166712
+
+fit15 <- update(fit14, mpg ~ .-gear)
+anova(fit14, fit15)
+# anova tells us we can get rid of gear
+summary(fit15)$coefficients
+# choose vs based on vs1 p-value = 0.750269228
+
+fit16 <- update(fit15, mpg ~ .-vs)
+anova(fit15, fit16)
+# anova tells us we can get rid of vs
+summary(fit16)$coefficients
+# choose drat for p-value = 0.462401185
+
+fit17 <- update(fit16, mpg ~ .-drat)
+anova(fit16, fit17)
+# anova tells us we can get rid of drat
+summary(fit17)$coefficients
+# choose disp for p-value = 0.298972150
+
+fit18 <- update(fit17, mpg ~ .-disp)
+anova(fit17, fit18)
+# anova tells us we can get rid of disp
+summary(fit18)$coefficients
+# choose hp due to p-value = 0.223087932
+
+fit19 <- update(fit18, mpg ~ .-hp)
+anova(fit18, fit19)
+# anova tells us we can get rid of hp
+summary(fit19)$coefficients
+# all p-values above 0.05, can stop but check anova for remaining vars
+
+fit20 <- update(fit19, mpg ~ .-qsec)
+anova(fit19, fit20)
+# anova says don't remove qsec
+#summary(fit20)$coefficients
+
+fit21 <- update(fit19, mpg ~ .-wt)
+anova(fit19, fit21)
+# anova says don't remove wt
+#summary(fit21)$coefficients
+
+summary(fit19)$coefficients
+R2_4 <- round(summary(fit19)$r.squared,3)
+sumCoef19 <- summary(fit19)$coefficients
+high19 <- sumCoef19[4,1] + qt(.975, df = fit1$df) * sumCoef19[4, 2]
+low19  <- sumCoef19[4,1] - qt(.975, df = fit1$df) * sumCoef19[4, 2]
+```
+For comparison, the same methodology was followed, but this time the order of variable elimination was determined by examining the new p-values after a variable has been elminated.  The p-value for transmission now indicates that the difference in average mpg between manual and automatic transmissions is now significant.  The expected value of the difference between means is `r round(coef(fit19)[4],2)` with a 95% confidence of being between `r round(low19,2)` and `r round(high19,2)`.  $R^2$ is now `r R2_4`, slightly higher than that of fit9a, but it includes an additional variable.
+
+Model19 with mpg ~ wt + qsec + transmission:   
+```{r fit19sum, echo=FALSE, message=FALSE}
+summary(fit19)$coefficients
+```
+
+## Examine the Residuals
+
+In order to choose between model9a and model19, the residuals are examined.  Plots of the residuals for both models are included in the appendix.  As can be seen in Figure 3, both models have some tendency for the residuals to be higher for the lower or higher fitted values.  Examination of the normal Q-Q plots (Figure 4) shows that the fit19 plot has more deviation from normality for the standardized residuals.  In addition, the scale-location plot (Figure 5), shows a clear trend in the square root of the standardized residuals.  The Cook's distance appears acceptable for both models.  Based on this analysis, model9a is selected and it is concluded that there is no statistically significant dependent of mpg on transmission type when covariates are included in the linear model.
+
+## Appendix
+
+```{r boxplot, message=FALSE, fig.height=2.2, fig.width=2.2, echo=FALSE}
+library(ggplot2)
+     auto <- mean(mtcars1[mtcars1$transmission=="Automatic","mpg"])
+     manual <- mean(mtcars1[mtcars1$transmission=="Manual","mpg"])
+
+p1 <- ggplot(mtcars1, aes(x = factor(transmission), y = mpg))
+p1 <- p1 + geom_boxplot(outlier.color = "red", aes(fill=factor(transmission)))
+p1 <- p1 + scale_fill_manual('transmission', values=c("Yellow","Green"))
+p1 <- p1 + theme_bw() + theme(legend.position = "none", axis.text = element_text(size = rel(0.5)), axis.title.x = element_text(size = rel(0.6)))
+p1 <- p1 + geom_text(data = NULL, label=paste("Automatic Mean mpg = ", round(auto), sep = ""), x=0.5, y=32, hjust = 0, size = 1.5)
+p1 <- p1 + geom_text(data = NULL, label=paste("Manual Mean mpg = ", round(manual), sep = ""), x=0.5, y=30, hjust = 0, size = 1.5)
+p1 <- p1 + xlab(label="Transmission Type") + ylab(label = "mpg")
+plot(p1)
+```
+
+Figure 1:  Boxplot of mpg by transmission type.
+
+```{r fig.width=6, fig.height=5, echo=FALSE}
+data(mtcars)
+pairs(mtcars, panel = panel.smooth, main = "Pairwise Scatterplot")
+```
+
+Figure 2:  Pairwise scatterplot for all variables in mtcars.
+
+```{r which1, echo=FALSE, message=FALSE, fig.height=4, fig.width=6}
+par(mfrow=c(1,2))
+plot(fit9a, which=1, main="Fit9a", col="blue"); plot(fit19, which=1, main="Fit19", col="blue")
+```
+
+Figure 3: Residuals vs. Fitted for fit9a and fit19.
+
+```{r which2, echo=FALSE, message=FALSE, fig.height=4, fig.width=6}
+par(mfrow=c(1,2))
+plot(fit9a, which=2, main="Fit9a"); plot(fit19, which=2, main="Fit19")
+```
+
+Figure 4: Normal Q-Q Plot for fit9a and fit19.
+
+```{r which3, echo=FALSE, message=FALSE, fig.height=4, fig.width=6}
+par(mfrow=c(1,2))
+plot(fit9a, which=3, main="Fit9a"); plot(fit19, which=3, main="Fit19")
+```
+
+Figure 5: Scale-Location Plot for fit9a and fit19.
+
+```{r which5, echo=FALSE, message=FALSE, fig.height=4, fig.width=6}
+par(mfrow=c(1,2))
+plot(fit9a, which=5, main="Fit9a"); plot(fit19, which=5, main="Fit19")
+```
+
+Figure 6: Residuals vs. Leverage Plot for fit9a and fit19.
